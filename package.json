@@ -1,0 +1,11 @@
+{
+  "name": "sticker-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local image-to-CutContour EPS/PDF tool for Roland VersaWorks",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "build": "node build.js"
+  }
+}
