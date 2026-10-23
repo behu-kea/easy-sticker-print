@@ -32,20 +32,49 @@ function build(){if(!source)return;enabled(false);try{
  const b=G.pathBounds(paths);if(!(b.w>0&&b.h>0))throw Error('The cut shape is too small.');const mmPerPixel=width/b.w,finishedH=b.h*mmPerPixel;if(finishedH>2000)throw Error('This sticker would be more than 2 metres tall. Reduce the width.');
  const x0=Math.min(imgX,b.x),y0=Math.min(imgY,b.y),x1=Math.max(imgX+p.w,b.x+b.w),y1=Math.max(imgY+p.h,b.y+b.h),margin=1;
  model={paths:paths.map(path=>path.map(([x,y])=>[(x-x0)*mmPerPixel+margin,(y-y0)*mmPerPixel+margin])),widthMM:(x1-x0)*mmPerPixel+2*margin,heightMM:(y1-y0)*mmPerPixel+2*margin,strokeMM:stroke,imageRect:{x:(imgX-x0)*mmPerPixel+margin,y:(imgY-y0)*mmPerPixel+margin,w:p.w*mmPerPixel,h:p.h*mmPerPixel},art:p.cropped,finishedW:width,finishedH,dpi:p.originalWidth/(p.w*mmPerPixel/25.4)};
- $('empty').hidden=true;$('preview').hidden=false;$('height').value=finishedH.toFixed(1);$('sizeStat').textContent=`${width.toFixed(1)} × ${finishedH.toFixed(1)} mm`;$('dpiStat').textContent=`${Math.round(model.dpi)} DPI${model.dpi<150?' · low':model.dpi<300?' · fair':' · good'}`;$('pathStat').textContent=paths.length+' closed';$('previewLabel').textContent='Artwork + vector cut contour';
- const warnings=[];if(paths.length>1)warnings.push(`${paths.length} separate cut paths: inspect all islands${$('holes').checked?' and holes':''}.`);if(model.dpi<150)warnings.push('Low resolution at this size; use a larger image for a sharper print.');if(width+2>450)warnings.push('The exported page exceeds the template’s 450 mm width, including margins.');if(border===0)warnings.push('Cut follows the edge. A small inset can help avoid white slivers from cutting tolerance.');if($('background').value==='solid')warnings.push('Check background removal carefully, especially near pale edges.');
- message(warnings.join(' ')||'Contour ready. Check the preview, then export your sticker.',warnings.some(x=>!x.startsWith('Cut follows'))?'warning':'');enabled(true);render();
- }catch(e){model=null;enabled(false);$('height').value='—';$('sizeStat').textContent=$('dpiStat').textContent=$('pathStat').textContent='—';$('previewLabel').textContent='Adjust the settings to continue';$('preview').hidden=true;$('empty').hidden=false;message(e.message,'error');}}
+ $('empty').hidden=true;$('preview').hidden=false;$('height').value=finishedH.toFixed(1);$('sizeStat').textContent=`${width.toFixed(1)} × ${finishedH.toFixed(1)} mm`;$('dpiStat').textContent=`${Math.round(model.dpi)} DPI${model.dpi<150?' · low':model.dpi<300?' · fair':' · good'}`;$('pathStat').textContent=paths.length+' closed';
+ const warnings=[];if(paths.length>1)warnings.push(`${paths.length} separate cut paths: inspect all islands${$('holes').checked?' and holes':''}.`);if(model.dpi<150)warnings.push('Low resolution at this size; use a larger image for a sharper print.');if(width+2>450)warnings.push('The exported page exceeds the template’s 450 mm width, including margins.');if($('background').value==='solid')warnings.push('Check background removal carefully, especially near pale edges.');
+ message(warnings.join(' '),warnings.some(x=>!x.startsWith('Cut follows'))?'warning':'');enabled(true);render();
+ }catch(e){model=null;enabled(false);$('height').value='—';$('sizeStat').textContent=$('dpiStat').textContent=$('pathStat').textContent='—';$('preview').hidden=true;$('empty').hidden=false;message(e.message,'error');}}
 function render(){if(!model)return;const c=$('preview'),stage=$('stage'),dpr=Math.min(window.devicePixelRatio||1,2),w=stage.clientWidth,h=stage.clientHeight;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const ctx=c.getContext('2d');ctx.scale(dpr,dpr);const scale=Math.min((w-90)/model.widthMM,(h-80)/model.heightMM),ox=(w-model.widthMM*scale)/2,oy=(h-model.heightMM*scale)/2;ctx.translate(ox,oy);ctx.scale(scale,scale);
  // White stock under the outer paths; holes remain transparent when enabled.
  ctx.beginPath();for(const p of model.paths){p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();}ctx.fillStyle='#fff';ctx.shadowColor='#26332525';ctx.shadowBlur=14/scale;ctx.shadowOffsetY=4/scale;ctx.fill('evenodd');ctx.shadowBlur=0;ctx.shadowOffsetY=0;
  const r=model.imageRect;ctx.drawImage(model.art,r.x,r.y,r.w,r.h);
- if($('showCut').checked){ctx.beginPath();for(const p of model.paths){p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();}ctx.strokeStyle='#e6009a';ctx.lineWidth=1.25/scale;ctx.lineJoin='round';ctx.stroke();}
- $('zoomLabel').textContent='FIT TO VIEW · NOT ACTUAL SIZE';}
+ {ctx.beginPath();for(const p of model.paths){p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();}ctx.strokeStyle='#e6009a';ctx.lineWidth=1.25/scale;ctx.lineJoin='round';ctx.stroke();}
+ }
 function exportFile(type){if(!model)return;try{const flat=canvas(model.art.width,model.art.height),ctx=flat.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,flat.width,flat.height);ctx.drawImage(model.art,0,0);const binary=atob(flat.toDataURL('image/jpeg',1).split(',')[1]),jpeg=Uint8Array.from(binary,c=>c.charCodeAt(0));const job={...model,jpeg,imageWidth:flat.width,imageHeight:flat.height};const bytes=StickerExport[type](job),url=URL.createObjectURL(new Blob([bytes],{type:type==='pdf'?'application/pdf':'application/postscript'}));const a=document.createElement('a');a.href=url;a.download=`${filename.replace(/[^a-zA-Z0-9_-]/g,'-')}-${model.finishedW.toFixed(0)}mm-cut.${type}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);message(`${type.toUpperCase()} exported with CutContour. In VersaWorks, confirm the cut path and keep the job at 100% scale.`);}catch(e){message('Export failed: '+e.message,'error');}}
 $('file').addEventListener('change',e=>{prepared=null;loadFile(e.target.files[0]);e.target.value='';});$('choose').onclick=()=>$('file').click();
-for(const name of ['dragenter','dragover'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.add('drag');});for(const name of ['dragleave','drop'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.remove('drag');if(name==='drop'){prepared=null;loadFile(e.dataTransfer.files[0]);}});
+// Use the same import behavior for the upload box and the entire preview stage.
+for (const id of ['dropzone', 'stage']) {
+ const zone = $(id);
+ let dragDepth = 0;
+ const isFileDrag = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+ zone.addEventListener('dragenter', e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  zone.classList.add('drag');
+ });
+ zone.addEventListener('dragover', e => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+ });
+ zone.addEventListener('dragleave', e => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) zone.classList.remove('drag');
+ });
+ zone.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  zone.classList.remove('drag');
+  const file = e.dataTransfer?.files[0];
+  if (file) loadFile(file);
+ });
+}
+
 for(const id of ['background','bgColor','tolerance','width','offset','smoothing','alpha','minArea','holes','stroke'])$(id).addEventListener('input',()=>{$('bgOptions').hidden=$('background').value!=='solid';$('smoothValue').textContent=Number($('smoothing').value).toFixed(2)+' mm';$('alphaValue').textContent=$('alpha').value;document.querySelectorAll('[data-offset]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.offset)===Number($('offset').value)));schedule();});
 document.querySelectorAll('[data-shape]').forEach(b=>b.onclick=()=>{shape=b.dataset.shape;document.querySelectorAll('[data-shape]').forEach(x=>x.classList.toggle('selected',x===b));schedule();});document.querySelectorAll('[data-offset]').forEach(b=>b.onclick=()=>{$('offset').value=b.dataset.offset;$('offset').dispatchEvent(new Event('input'));});
-$('showCut').onchange=render;new ResizeObserver(render).observe($('stage'));$('eps').onclick=()=>exportFile('eps');$('pdf').onclick=()=>exportFile('pdf');$('helpButton').onclick=()=>$('help').showModal();$('closeHelp').onclick=()=>$('help').close();$('help').onclick=e=>{if(e.target===$('help')){const r=$('help').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('help').close();}};
+new ResizeObserver(render).observe($('stage'));$('eps').onclick=()=>exportFile('eps');$('pdf').onclick=()=>exportFile('pdf');
 $('demo').onclick=()=>{const c=canvas(1200,1000),ctx=c.getContext('2d');ctx.translate(600,500);ctx.beginPath();for(let i=0;i<240;i++){const a=i*Math.PI/120,r=390+24*Math.cos(a*12);const x=r*Math.cos(a),y=r*Math.sin(a);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.fillStyle='#e2f4bc';ctx.fill();ctx.fillStyle='#244d3b';ctx.textAlign='center';ctx.font='bold 115px Georgia';ctx.fillText('MAKE',0,-110);ctx.font='italic 105px Georgia';ctx.fillText('good things',0,10);ctx.font='bold 115px Georgia';ctx.fillText('STICK.',0,135);ctx.font='30px sans-serif';ctx.fillText('✦  MADE BY YOU  ✦',0,235);source=c;filename='make-good-things-stick';prepared=null;$('filename').textContent='make-good-things-stick.png';$('filehint').textContent='1,200 × 1,000 px · sample artwork';$('background').value='alpha';$('bgOptions').hidden=true;schedule();};
